@@ -5,12 +5,11 @@ Processwire module for Twilio API
 Includes API and basic usage:
 - Send SMS message
 - - Truncate message to single message character limit 
-- - Auto-select number from range of numbers depending on $To number country of origin–this enables you to send messages with a local number to that user if one added to the config
+- - Auto-select number from range of numbers depending on $To number country of origin–this enables you to send messages with a local number to that user if one added to the config.
 
-### Usage:
+### Usage:
 
-`
-$twilio = $modules->get("TwilioChannels");
+`$twilio = $modules->get("TwilioChannels");
 $twilio->sendSMS($toNumber, $message)
 `
 
