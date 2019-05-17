@@ -1,0 +1,150 @@
+<?php
+/**
+ * TwilioChannels (0.1)
+ * Methods that uses Twilio channels to send messages to stored numbers.
+ *
+ * @author BenByford and RyanBritnell
+ *
+ * ProcessWire 2.x
+ * Copyright (C) 2011 by Ryan Cramer
+ * Licensed under GNU/GPL v2, see LICENSE.TXT
+ *
+ * http://www.processwire.com
+ * http://www.ryancramer.com
+ *
+ */
+
+// imports
+require __DIR__ . '/vendor/autoload.php';
+use Twilio\Rest\Client;
+
+class TwilioChannels extends WireData implements Module{
+
+    public static function getModuleInfo() {
+		return array(
+			'title' => "TwilioChannels",
+			'version' => "0.0.1",
+			'summary' => "Basic Twilio implementation.",
+			'author' => "Ben Byford",
+			'icon' => "phone",
+			'autoload' => true,
+			'singular' => true,
+		);
+	}
+
+    /* Functions adapted from Twilio Channels SDK
+    * https://www.twilio.com/docs/sms/send-messages
+    * https://www.twilio.com/docs/libraries/php
+    */
+
+    protected $log;
+    protected $to               = '';
+    protected $maxMessageLength = 160; // this is the number of characters allowed in a single basic SMS
+    protected $truncate         = true;
+
+    public function loadTwilio($sid, $token) {
+
+        try {
+            $client = new Client($this->id, $this->token);
+        } catch (\Exception $e) {
+            // log exception
+            $this->log->save("twilio-channels","Exception:" . $e);
+        }
+
+        return $client;
+    }
+
+    public function ___sendSMS($number, $message) {
+        
+        $this->log = $this->wire('log');
+
+        // get twilio client
+        $client = $this->loadTwilio($this->sid, $this->token);
+
+        // get and check from numbers against to $number
+        $fromNumber = $this->compareNumbers($this->from_number, $number);
+
+        // if from number match
+        if($fromNumber){
+
+            // if truncate true then set the max message length to $maxMessageLength including trailing dots ...
+            $msg = $truncate ? messageTruncate($message) : $message;
+
+            $info = array(
+                'from' => $fromNumber,
+                'body' => $msg,
+            );
+
+            try {
+                // try sending message
+                $sent = $client->account->messages->create($number, $info);
+
+                // log $to, date and truncated message
+                if($sent != "") $this->log->save("twilio-channels","Tried to send to " . $number . " from ". $fromNumber . " at: " . date("Y-m-d h:i:sa") . " - " . substr($sent, 0, 100));
+
+            } catch (\Exception $e) {
+                // log exception
+                $this->log->save("twilio-channels","Exception:" . $e);
+            }
+        }
+    }
+
+    //
+    // $froms is a PW textarea of comma delimited numbers and match list
+    // e.g.
+    // +172727272727, +1, 001, 01
+    // +4411111111111, +44, 0044, 044
+    //
+    private function compareNumbers($froms, $to){
+        // array of newlines
+        $fromNumberArray = explode("\n", $froms);
+        $defaultNumber = 0;
+
+        // check each number match
+        foreach ($fromNumberArray as $fromNumbers) {
+
+            $fromNumbersArray = explode(",", $fromNumbers);
+
+            foreach ($fromNumbersArray as $key => $match) {
+
+                // skip over phone number to matches
+                if($key === 0) continue;
+
+                // check match for default value key
+                if(trim($match)=="default"){
+
+                    // if default key found then set default number to return if no match found
+                    $defaultNumber = filter_var($fromNumbersArray[0], FILTER_SANITIZE_NUMBER_INT);
+
+                    // skip to next check
+                    continue;
+                }
+
+                // if matched string then return number
+                if(strpos($to, trim($match))===0){
+
+                    // return from number with only + . - and int characters.
+                    // this makes sure there are no spaces and strange characters
+                    // returning the number will stop looking in the settings
+                    return filter_var($fromNumbersArray[0], FILTER_SANITIZE_NUMBER_INT);
+                }
+            }
+        }
+        // return default number if found, else 0
+        return $defaultNumber;
+    }
+
+    //
+    // Helper function to create truncated message
+    //
+    public function ___messageTruncate($message){
+        
+        // construct message to be sent
+        $msgLength = strlen($message);
+
+        if($msgLength > $this->maxMessageLength){
+            $message = substr($message, 0, ($this->maxMessageLength - 3)) . "...";
+        }
+        return $message;
+    }
+}
